@@ -36,6 +36,8 @@ interface CostBucket {
 interface CostResult {
   object: string;
   amount: { value: number; currency: string };
+  start_time?: number;
+  end_time?: number;
   results?: CostBucket[];
 }
 
@@ -69,7 +71,9 @@ export async function fetchDailyCosts(startDate: string, endDate: string): Promi
       const resultAmount = result.amount?.value || 0;
       if (resultAmount === 0 && !result.results?.length) continue;
 
-      const dayDate = format(new Date((start + i * 86400) * 1000), 'yyyy-MM-dd');
+      // Use start_time from API when available, fall back to index-based calculation
+      const bucketTime = result.start_time ?? (start + i * 86400);
+      const dayDate = format(new Date(bucketTime * 1000), 'yyyy-MM-dd');
 
       if (!costMap[dayDate]) {
         costMap[dayDate] = { totalCost: 0, breakdown: {} };
