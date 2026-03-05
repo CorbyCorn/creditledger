@@ -45,8 +45,9 @@ export default function DashboardPage() {
 
   const isLoading = summaryLoading || creditsLoading || costsLoading;
 
-  const totalSpent = summary?.totalSpent ?? 0;
-  const remaining = TOTAL_CREDIT_GRANT - totalSpent;
+  // Use credit balance from OpenAI as source of truth
+  const totalSpent = credits?.totalUsed ?? summary?.totalSpent ?? 0;
+  const remaining = credits?.remaining ?? (TOTAL_CREDIT_GRANT - totalSpent);
   const dailyAvg = summary?.dailyAvgBurn ?? 0;
   const weeklyAvg = summary?.weeklyAvgBurn ?? 0;
   const monthlyAvg = summary?.monthlyAvgBurn ?? 0;

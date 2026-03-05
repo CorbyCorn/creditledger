@@ -64,22 +64,24 @@ export async function fetchDailyCosts(startDate: string, endDate: string): Promi
 
     const data = (await fetchOpenAI('/v1/organization/costs', params)) as CostPage;
 
-    for (const result of data.data || []) {
+    for (let i = 0; i < (data.data || []).length; i++) {
+      const result = data.data[i];
       const resultAmount = result.amount?.value || 0;
       if (resultAmount === 0 && !result.results?.length) continue;
 
+      const dayDate = format(new Date((start + i * 86400) * 1000), 'yyyy-MM-dd');
+
+      if (!costMap[dayDate]) {
+        costMap[dayDate] = { totalCost: 0, breakdown: {} };
+      }
+
+      // Use the day-level total from the API (not sum of line items, which can overlap)
+      costMap[dayDate].totalCost = resultAmount;
+
+      // Line items are for breakdown only
       for (const bucket of result.results || []) {
         const model = bucket.line_item || 'unknown';
         const cost = bucket.amount?.value || 0;
-
-        // Group by day based on position in data array
-        const dayIndex = (data.data || []).indexOf(result);
-        const dayDate = format(new Date((start + dayIndex * 86400) * 1000), 'yyyy-MM-dd');
-
-        if (!costMap[dayDate]) {
-          costMap[dayDate] = { totalCost: 0, breakdown: {} };
-        }
-        costMap[dayDate].totalCost += cost;
         costMap[dayDate].breakdown[model] = (costMap[dayDate].breakdown[model] || 0) + cost;
       }
     }

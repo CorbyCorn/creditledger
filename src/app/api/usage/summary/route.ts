@@ -9,8 +9,10 @@ export async function GET() {
     const costs = await getDailyCosts();
     const balance = await getCreditBalance();
 
-    const totalSpent = costs.reduce((s, c) => s + c.totalCost, 0);
-    const remaining = balance ? balance.remaining : TOTAL_CREDIT_GRANT - totalSpent;
+    const costSum = costs.reduce((s, c) => s + c.totalCost, 0);
+    // Use credit balance from OpenAI as source of truth when available
+    const totalSpent = balance && balance.totalUsed > 0 ? balance.totalUsed : costSum;
+    const remaining = balance && balance.remaining > 0 ? balance.remaining : TOTAL_CREDIT_GRANT - costSum;
 
     const daysOfData = costs.length || 1;
     const dailyAvgBurn = totalSpent / daysOfData;
