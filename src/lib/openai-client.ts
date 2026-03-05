@@ -186,7 +186,7 @@ interface CreditGrant {
   has_more: boolean;
 }
 
-export async function fetchCreditBalance(): Promise<CreditBalance> {
+export async function fetchCreditBalance(): Promise<CreditBalance | null> {
   try {
     const data = (await fetchOpenAI('/v1/dashboard/billing/credit_grants')) as CreditGrant;
 
@@ -198,6 +198,9 @@ export async function fetchCreditBalance(): Promise<CreditBalance> {
       totalUsed += grant.used_amount || 0;
     }
 
+    // Only return if we got real data
+    if (totalGranted === 0 && totalUsed === 0) return null;
+
     return {
       totalGranted: totalGranted || TOTAL_CREDIT_GRANT,
       totalUsed,
@@ -205,13 +208,8 @@ export async function fetchCreditBalance(): Promise<CreditBalance> {
       lastUpdated: new Date().toISOString(),
     };
   } catch {
-    // Fallback: return grant total without usage data
-    return {
-      totalGranted: TOTAL_CREDIT_GRANT,
-      totalUsed: 0,
-      remaining: TOTAL_CREDIT_GRANT,
-      lastUpdated: new Date().toISOString(),
-    };
+    // Return null so callers know the API call failed (don't overwrite good data)
+    return null;
   }
 }
 
@@ -219,7 +217,7 @@ export async function syncAllData(daysBack: number = 90) {
   const endDate = format(new Date(), 'yyyy-MM-dd');
   const startDate = format(subDays(new Date(), daysBack), 'yyyy-MM-dd');
 
-  const [costs, usage, credits] = await Promise.all([
+  const [costs, usage, creditsResult] = await Promise.all([
     fetchDailyCosts(startDate, endDate),
     fetchDailyUsage(startDate, endDate),
     fetchCreditBalance(),
@@ -231,7 +229,6 @@ export async function syncAllData(daysBack: number = 90) {
     const costRecord = costByDate.get(u.date);
     if (costRecord) {
       u.totalCost = costRecord.totalCost;
-      // Distribute costs across models proportionally by tokens
       const totalTokens = u.models.reduce((s, m) => s + m.tokensIn + m.tokensOut, 0);
       if (totalTokens > 0) {
         for (const model of u.models) {
@@ -243,10 +240,18 @@ export async function syncAllData(daysBack: number = 90) {
     return u;
   });
 
-  // If credit endpoint didn't return usage, calculate from costs
-  if (credits.totalUsed === 0 && costs.length > 0) {
-    credits.totalUsed = costs.reduce((s, c) => s + c.totalCost, 0);
-    credits.remaining = credits.totalGranted - credits.totalUsed;
+  // Build credit balance: use API data if available, otherwise compute from costs
+  let credits: CreditBalance;
+  if (creditsResult && creditsResult.totalUsed > 0) {
+    credits = creditsResult;
+  } else {
+    const totalUsed = costs.reduce((s, c) => s + c.totalCost, 0);
+    credits = {
+      totalGranted: TOTAL_CREDIT_GRANT,
+      totalUsed,
+      remaining: TOTAL_CREDIT_GRANT - totalUsed,
+      lastUpdated: new Date().toISOString(),
+    };
   }
 
   return { costs, usage: mergedUsage, credits };
