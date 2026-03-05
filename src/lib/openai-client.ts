@@ -68,10 +68,9 @@ export async function fetchDailyCosts(startDate: string, endDate: string): Promi
 
     for (let i = 0; i < (data.data || []).length; i++) {
       const result = data.data[i];
-      const resultAmount = result.amount?.value || 0;
-      if (resultAmount === 0 && !result.results?.length) continue;
+      if (!result.results?.length) continue;
 
-      // Use start_time from API when available, fall back to index-based calculation
+      // Use start_time from API for correct date (fixes pagination across pages)
       const bucketTime = result.start_time ?? (start + i * 86400);
       const dayDate = format(new Date(bucketTime * 1000), 'yyyy-MM-dd');
 
@@ -79,13 +78,11 @@ export async function fetchDailyCosts(startDate: string, endDate: string): Promi
         costMap[dayDate] = { totalCost: 0, breakdown: {} };
       }
 
-      // Use the day-level total from the API (not sum of line items, which can overlap)
-      costMap[dayDate].totalCost = resultAmount;
-
-      // Line items are for breakdown only
+      // Sum line items for the daily total
       for (const bucket of result.results || []) {
         const model = bucket.line_item || 'unknown';
         const cost = bucket.amount?.value || 0;
+        costMap[dayDate].totalCost += cost;
         costMap[dayDate].breakdown[model] = (costMap[dayDate].breakdown[model] || 0) + cost;
       }
     }
